@@ -291,13 +291,13 @@ def write_callback(value):
                           for (postfix, metric_value)
                           in zip(append_names, value.values) ])
 
+        try:
+            CONFIG['queue'].put(msg, block=False)
+        except Exception, e:
+            collectd.error("Failed to message:" + str(e))
+
     except Exception:
         collectd.error("Exception in write_callback: " + traceback.format_exc())
-
-    try:
-        CONFIG['queue'].put(msg, block=False)
-    except Exception, e:
-        collectd.error("Failed to message:" + str(e))
 
 if 'collectd' in globals().keys():
     collectd.register_config(configure_callback)
