@@ -25,6 +25,7 @@
 
 import Queue, socket, threading, time, re
 from collections import namedtuple
+import traceback
 
 try:
     import collectd
@@ -150,6 +151,10 @@ def send_wavefront(host, port, item_queue):
                 pass
             connection = None
 
+        except Exception:
+            collectd.error("Exception in send_wavefront: " + traceback.format_exc())
+
+
 # Currently, the following configuration is accepted
 #
 # Server -> hostname/ip to connect to
@@ -255,35 +260,40 @@ def write_callback(value):
     #  collectd.interface-em1.if_octets.tx = 10
     #  collectd.interface-em1.if_octets.rx = 20
     #
-    
-    metric_name = "%s%s.%s%s" % ( value.plugin,
-                                  '.' + value.plugin_instance if len(value.plugin_instance) > 0 else '',
-                                  value.type,
-                                  '.' + value.type_instance if len(value.type_instance) > 0 else '' )
-
     try:
-        prefix = CONFIG['prefix']
-        if not prefix.endswith('.'):
-            prefix = prefix + '.'
-    except KeyError, e:
-        prefix = ''
 
-    try:
-        tags_append = ' ' + CONFIG['tags_append']
-    except KeyError, e:
-        tags_append = ''
+        metric_name = "%s%s.%s%s" % ( value.plugin,
+                                      '.' + value.plugin_instance if len(value.plugin_instance) > 0 else '',
+                                      value.type,
+                                      '.' + value.type_instance if len(value.type_instance) > 0 else '' )
 
-    append_names = [ '.' + append_name if append_name != 'value' else ''
-                     for (append_name, _, _, _)
-                     in collectd.get_dataset(value.type) ]
+        try:
+            prefix = CONFIG['prefix']
+            if not prefix.endswith('.'):
+                prefix = prefix + '.'
+        except KeyError, e:
+            prefix = ''
 
-    if len(append_names) != len(value.values):
-        collectd.error("len(ds_names) != len(value.values)")
-        return
-    
-    msg = "".join([ "%s %f %d host=%s%s\n" % (prefix + metric_name + postfix, metric_value, value.time, value.host, tags_append)
-                      for (postfix, metric_value)
-                      in zip(append_names, value.values) ])
+        try:
+            tags_append = ' ' + CONFIG['tags_append']
+        except KeyError, e:
+            tags_append = ''
+
+        append_names = [ '.' + append_name if append_name != 'value' else ''
+                         for (append_name, _, _, _)
+                         in collectd.get_dataset(value.type) ]
+
+        if len(append_names) != len(value.values):
+            collectd.error("len(ds_names) != len(value.values)")
+            return
+
+        msg = "".join([ "%s %f %d host=%s%s\n" % (prefix + metric_name + postfix, metric_value, value.time, value.host, tags_append)
+                          for (postfix, metric_value)
+                          in zip(append_names, value.values) ])
+
+    except Exception:
+        collectd.error("Exception in write_callback: " + traceback.format_exc())
+
     try:
         CONFIG['queue'].put(msg, block=False)
     except Exception, e:
